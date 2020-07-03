@@ -1,6 +1,26 @@
+# -*- coding: utf-8 -*-
+# Copyright 2007-2020 The HyperSpy developers
+#
+# This file is part of  HyperSpy.
+#
+#  HyperSpy is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+#  HyperSpy is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with  HyperSpy.  If not, see <http://www.gnu.org/licenses/>.
+
 from collections import namedtuple
 
+import pytest
 import numpy as np
+import logging
 
 import hyperspy.api as hs
 from hyperspy.io import assign_signal_subclass
@@ -28,24 +48,30 @@ subclass_cases = (testcase('float', 1000, '', 'BaseSignal'),
                   )
 
 
-def test_assignment_class():
+def test_assignment_class(caplog):
     for case in subclass_cases:
-        assert (
-            assign_signal_subclass(
-                dtype=np.dtype(case.dtype),
-                signal_dimension=case.sig_dim,
-                signal_type=case.sig_type,
-                lazy=False) is
-            getattr(hs.signals, case.cls))
-        lazyclass = 'Lazy' + case.cls if case.cls is not 'BaseSignal' \
-            else 'LazySignal'
-        assert (
-            assign_signal_subclass(
-                dtype=np.dtype(case.dtype),
-                signal_dimension=case.sig_dim,
-                signal_type=case.sig_type,
-                lazy=True) is
-            getattr(_lazy_signals, lazyclass))
+        with caplog.at_level(logging.WARNING):
+            new_subclass = assign_signal_subclass(
+                 dtype=np.dtype(case.dtype),
+                 signal_dimension=case.sig_dim,
+                 signal_type=case.sig_type,
+                 lazy=False,
+            )
+
+        assert new_subclass is getattr(hs.signals, case.cls)
+
+        if case.sig_type == "weird":
+            assert "not understood. Setting signal type to" in caplog.text
+
+        lazyclass = 'Lazy' + case.cls if case.cls != 'BaseSignal' else 'LazySignal'
+        new_subclass = assign_signal_subclass(
+            dtype=np.dtype(case.dtype),
+            signal_dimension=case.sig_dim,
+            signal_type=case.sig_type,
+            lazy=True,
+        )
+
+        assert new_subclass is getattr(_lazy_signals, lazyclass)
 
 
 class TestConvertBaseSignal:

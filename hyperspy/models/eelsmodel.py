@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2007-2016 The HyperSpy developers
+# Copyright 2007-2020 The HyperSpy developers
 #
 # This file is part of  HyperSpy.
 #
@@ -36,11 +36,11 @@ class EELSModel(Model1D):
     Parameters
     ----------
     spectrum : a Signal1D (or any Signal1D subclass) instance
-    auto_background : boolean
+    auto_background : bool
         If True, and if spectrum is an EELS instance adds automatically
         a powerlaw to the model and estimate the parameters by the
         two-area method.
-    auto_add_edges : boolean
+    auto_add_edges : bool
         If True, and if spectrum is an EELS instance, it will
         automatically add the ionization edges as defined in the
         Signal1D instance. Adding a new element to the spectrum using
@@ -100,12 +100,6 @@ class EELSModel(Model1D):
     def signal1D(self, value):
         if isinstance(value, EELSSpectrum):
             self._signal = value
-            if self.signal._are_microscope_parameters_missing():
-                raise ValueError(
-                    "The required microscope parameters are not defined in "
-                    "the EELS spectrum signal metadata. Use "
-                    "``set_microscope_parameters`` to set them."
-                )
         else:
             raise ValueError(
                 "This attribute can only contain an EELSSpectrum "
@@ -187,6 +181,12 @@ class EELSModel(Model1D):
         ----------
         e_shells : list of strings
         """
+        if self.signal._are_microscope_parameters_missing():
+            raise ValueError(
+                "The required microscope parameters are not defined in "
+                "the EELS spectrum signal metadata. Use "
+                "``set_microscope_parameters`` to set them."
+            )
         if e_shells is None:
             e_shells = list(self.signal.subshells)
         e_shells.sort()
@@ -354,7 +354,14 @@ class EELSModel(Model1D):
                              '\'%s\' provided.' % kind)
 
     def smart_fit(self, start_energy=None, **kwargs):
-        """ Fits everything in a cascade style.
+        """ Fits EELS edges in a cascade style.
+        The fitting procedure acts in iterative manner along the energy-loss-axis.
+        First it fits only the background up to the first edge.
+        It continues by deactivating all edges except the first one, then performs the fit. 
+        Then it only activates the the first two, fits, and repeats this until all 
+        edges are fitted simultanously.
+
+        Other, non-EELSCLEdge components, are never deactivated, and fitted on every iteration.
 
         Parameters
         ----------
@@ -505,6 +512,7 @@ class EELSModel(Model1D):
         last_index = len(self._active_edges) - 1    # Last edge index
         i = 1
         twins = []
+        # find twins
         while edgenumber + i <= last_index and (
                 active_edges[edgenumber + i].intensity.twin is not None or
                 active_edges[edgenumber + i].active is False):

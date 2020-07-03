@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2007-2016 The HyperSpy developers
+# Copyright 2007-2020 The HyperSpy developers
 #
 # This file is part of  HyperSpy.
 #
@@ -29,10 +29,9 @@ from hyperspy.drawing.widgets import VerticalLineWidget, LabelWidget
 from hyperspy.events import EventSuppressor
 from hyperspy.signal_tools import SpanSelectorInSignal1D
 from hyperspy.ui_registry import add_gui_method, DISPLAY_DT, TOOLKIT_DT
-from hyperspy.misc.utils import signal_range_from_roi
 
 
-@add_gui_method(toolkey="Model1D.fit_component")
+@add_gui_method(toolkey="hyperspy.Model1D.fit_component")
 class ComponentFit(SpanSelectorInSignal1D):
 
     def __init__(self, model, component, signal_range=None,
@@ -53,11 +52,8 @@ class ComponentFit(SpanSelectorInSignal1D):
         self.fit_kwargs = kwargs
         self.only_current = only_current
         if signal_range == "interactive":
-            if not hasattr(self.model, '_plot'):
-                self.model.plot()
-            elif self.model._plot is None:
-                self.model.plot()
-            elif self.model._plot.is_active() is False:
+            if (not hasattr(self.model, '_plot') or self.model._plot is None or
+                    not self.model._plot.is_active):
                 self.model.plot()
             self.span_selector_switch(on=True)
 
@@ -466,7 +462,7 @@ class Model1D(BaseModel):
 
         """
         try:
-            x1, x2 = signal_range_from_roi(x1)
+            x1, x2 = x1
         except TypeError:
             # It was not a ROI, we carry on
             pass
@@ -497,7 +493,7 @@ class Model1D(BaseModel):
 
         """
         try:
-            x1, x2 = signal_range_from_roi(x1)
+            x1, x2 = x1
         except TypeError:
             # It was not a ROI, we carry on
             pass
@@ -532,7 +528,7 @@ class Model1D(BaseModel):
 
         """
         try:
-            x1, x2 = signal_range_from_roi(x1)
+            x1, x2 = x1
         except TypeError:
             # It was not a ROI, we carry on
             pass
@@ -781,8 +777,7 @@ class Model1D(BaseModel):
         disable_adjust_position
 
         """
-        if (self._plot is None or
-                self._plot.is_active() is False):
+        if self._plot is None or not self._plot.is_active:
             self.plot()
         if self._position_widgets:
             self.disable_adjust_position()
@@ -876,7 +871,6 @@ class Model1D(BaseModel):
             display=True,
             toolkit=None,
             **kwargs):
-        signal_range = signal_range_from_roi(signal_range)
         component = self._get_component(component)
         cf = ComponentFit(self, component, signal_range,
                           estimate_parameters, fit_independent,
@@ -901,7 +895,8 @@ class Model1D(BaseModel):
             If 'interactive' the signal range is selected using the span
              selector on the spectrum plot. The signal range can also
              be manually specified by passing a tuple of floats. If None
-             the current signal range is used.
+             the current signal range is used. Note that ROIs can be used
+             in place of a tuple.
         estimate_parameters : bool, default True
             If True will check if the component has an
             estimate_parameters function, and use it to estimate the
@@ -911,6 +906,11 @@ class Model1D(BaseModel):
             component paramemeters are fixed.
         %s
         %s
+        **kwargs : dict
+            All extra keyword arguments are passed to the
+            py:meth:`~hyperspy.model.BaseModel.fit` or 
+            py:meth:`~hyperspy.model.BaseModel.multifit`
+            method, depending if ``only_current`` is True or False.
 
         Examples
         --------

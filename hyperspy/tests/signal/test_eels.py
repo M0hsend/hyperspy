@@ -1,4 +1,4 @@
-# Copyright 2007-2016 The HyperSpy developers
+# Copyright 2007-2020 The HyperSpy developers
 #
 # This file is part of  HyperSpy.
 #
@@ -15,12 +15,17 @@
 # You should have received a copy of the GNU General Public License
 # along with  HyperSpy.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
 
 import numpy as np
 import pytest
 
 from hyperspy import signals, model
+from hyperspy._components.gaussian import Gaussian
 from hyperspy.decorators import lazifyTestClass
+from hyperspy.io import load
+
+MYPATH = os.path.dirname(__file__)
 
 
 @lazifyTestClass
@@ -33,11 +38,11 @@ class Test_Estimate_Elastic_Scattering_Threshold:
         energy_axis.scale = 0.02
         energy_axis.offset = -5
 
-        gauss = model.components1d.Gaussian()
+        gauss = Gaussian()
         gauss.centre.value = 0
         gauss.A.value = 5000
         gauss.sigma.value = 0.5
-        gauss2 = model.components1d.Gaussian()
+        gauss2 = Gaussian()
         gauss2.sigma.value = 0.5
         # Inflexion point 1.5
         gauss2.A.value = 5000
@@ -145,8 +150,7 @@ class TestAlignZLP:
         s = self.signal
         s.align_zero_loss_peak(
             calibrate=True,
-            print_stats=False,
-            show_progressbar=None)
+            print_stats=False)
         zlpc = s.estimate_zero_loss_peak_centre()
         np.testing.assert_allclose(zlpc.data.mean(), 0)
         np.testing.assert_allclose(zlpc.data.std(), 0)
@@ -158,7 +162,6 @@ class TestAlignZLP:
         s.align_zero_loss_peak(
             calibrate=True,
             print_stats=False,
-            show_progressbar=None,
             mask=mask)
         zlpc = s.estimate_zero_loss_peak_centre(mask=mask)
         np.testing.assert_allclose(np.nanmean(zlpc.data), 0,
@@ -170,8 +173,7 @@ class TestAlignZLP:
         s = self.signal
         s.align_zero_loss_peak(
             calibrate=False,
-            print_stats=False,
-            show_progressbar=None)
+            print_stats=False)
         zlpc = s.estimate_zero_loss_peak_centre()
         np.testing.assert_allclose(zlpc.data.std(), 0, atol=10e-3)
 
@@ -180,8 +182,7 @@ class TestAlignZLP:
         s2 = s.deepcopy()
         s.align_zero_loss_peak(calibrate=True,
                                print_stats=False,
-                               also_align=[s2],
-                               show_progressbar=None)
+                               also_align=[s2])
         zlpc = s2.estimate_zero_loss_peak_centre()
         assert zlpc.data.mean() == 0
         assert zlpc.data.std() == 0
@@ -205,8 +206,7 @@ class TestAlignZLP:
         original_size = s.axes_manager.signal_axes[0].size
         s.align_zero_loss_peak(
             crop=False,
-            print_stats=False,
-            show_progressbar=None)
+            print_stats=False)
         assert original_size == s.axes_manager.signal_axes[0].size
 
 
@@ -239,7 +239,7 @@ class TestFourierRatioDeconvolution:
     @pytest.mark.parametrize(('extrapolate_lowloss'), [True, False])
     def test_running(self, extrapolate_lowloss):
         s = signals.EELSSpectrum(np.arange(200))
-        gaussian = model.components1d.Gaussian()
+        gaussian = Gaussian()
         gaussian.A.value = 50
         gaussian.sigma.value = 10
         gaussian.centre.value = 20
@@ -247,3 +247,114 @@ class TestFourierRatioDeconvolution:
         s_ll.axes_manager[0].offset = -50
         s.fourier_ratio_deconvolution(s_ll,
                                       extrapolate_lowloss=extrapolate_lowloss)
+
+
+class TestRebin:
+    def setup_method(self, method):
+        # Create an empty spectrum
+        s = signals.EELSSpectrum(np.ones((4, 2, 1024)))
+        self.signal = s
+
+    def test_rebin_without_dwell_time(self):
+        s = self.signal
+        s.rebin(scale=(2, 2, 1))
+
+    def test_rebin_dwell_time(self):
+        s = self.signal
+        s.metadata.add_node("Acquisition_instrument.TEM.Detector.EELS")
+        s_mdEELS = s.metadata.Acquisition_instrument.TEM.Detector.EELS
+        s_mdEELS.dwell_time = 0.1
+        s_mdEELS.exposure = 0.5
+        s2 = s.rebin(scale=(2, 2, 8))
+        s2_mdEELS = s2.metadata.Acquisition_instrument.TEM.Detector.EELS
+        assert s2_mdEELS.dwell_time == (0.1 * 2 * 2)
+        assert s2_mdEELS.exposure == (0.5 * 2 * 2)
+
+        def test_rebin_exposure(self):
+            s = self.signal
+            s.metadata.exposure = 10.2
+            s2 = s.rebin(scale=(2, 2, 8))
+            assert s2.metadata.exposure == (10.2 * 2 * 2)
+
+    def test_offset_after_rebin(self):
+        s = self.signal
+        s.axes_manager[0].offset = 1
+        s.axes_manager[1].offset = 2
+        s.axes_manager[2].offset = 3
+        s2 = s.rebin(scale=(2, 2, 1))
+        assert s2.axes_manager[0].offset == 1.5
+        assert s2.axes_manager[1].offset == 2.5
+        assert s2.axes_manager[2].offset == s.axes_manager[2].offset
+
+@lazifyTestClass
+class Test_Estimate_Thickness:
+
+    def setup_method(self, method):
+        # Create an empty spectrum
+        self.s = load(os.path.join(
+            MYPATH,
+            "data/EELS_LL_linescan_simulated_thickness_variation.hspy"))
+        self.zlp = load(os.path.join(
+            MYPATH,
+            "data/EELS_ZLP_linescan_simulated_thickness_variation.hspy"))
+
+    def test_relative_thickness(self):
+        t = self.s.estimate_thickness(zlp=self.zlp)
+        np.testing.assert_allclose(t.data, np.arange(0.3,2,0.1), atol=4e-3)
+        assert t.metadata.Signal.quantity == "$\\frac{t}{\\lambda}$"
+
+    def test_thickness_mfp(self):
+        t = self.s.estimate_thickness(zlp=self.zlp, mean_free_path=120)
+        np.testing.assert_allclose(t.data, 120 * np.arange(0.3,2,0.1), rtol=3e-3)
+        assert t.metadata.Signal.quantity == "thickness (nm)"
+
+    def test_thickness_density(self):
+        t = self.s.estimate_thickness(zlp=self.zlp, density=3.6)
+        np.testing.assert_allclose(t.data, 142 * np.arange(0.3,2,0.1), rtol=3e-3)
+        assert t.metadata.Signal.quantity == "thickness (nm)"
+
+    def test_thickness_density_and_mfp(self):
+        t = self.s.estimate_thickness(zlp=self.zlp, density=3.6, mean_free_path=120)
+        np.testing.assert_allclose(t.data, 127.5 * np.arange(0.3,2,0.1), rtol=3e-3)
+        assert t.metadata.Signal.quantity == "thickness (nm)"
+
+    def test_threshold(self):
+        t = self.s.estimate_thickness(threshold=4.5, density=3.6, mean_free_path=120)
+        np.testing.assert_allclose(t.data, 127.5 * np.arange(0.3,2,0.1), rtol=3e-3)
+        assert t.metadata.Signal.quantity == "thickness (nm)"
+
+    def test_threshold_nd(self):
+        threshold = self.s._get_navigation_signal()
+        threshold.data[:] = 4.5
+        t = self.s.estimate_thickness(threshold=threshold, density=3.6, mean_free_path=120)
+        np.testing.assert_allclose(t.data, 127.5 * np.arange(0.3,2,0.1), rtol=3e-3)
+        assert t.metadata.Signal.quantity == "thickness (nm)"
+
+    def test_no_zlp_or_threshold(self):
+        with pytest.raises(ValueError):
+            self.s.estimate_thickness()
+
+    def test_no_metadata(self):
+        del self.s.metadata.Acquisition_instrument
+        with pytest.raises(RuntimeError):
+            self.s.estimate_thickness(zlp=self.zlp, density=3.6)
+
+class Test_Print_Edges_Near_Energy:
+    def setup_method(self, method):
+        # Create an empty spectrum
+        s = signals.EELSSpectrum(np.ones((4, 2, 1024)))
+        self.signal = s
+
+    def test_at_532eV(self):
+        s = self.signal
+        table_ascii = s.print_edges_near_energy(532)
+
+        assert table_ascii.__repr__() == ('+-------+-------------------+------'
+        '-----+-----------------+\n|  edge | onset energy (eV) | relevance '
+        '|   description   |\n+-------+-------------------+-----------+'
+        '-----------------+\n|  O_K  |       532.0       |   Major   '
+        '|   Abrupt onset  |\n| Pd_M3 |       531.0       |   Minor   '
+        '|                 |\n| Sb_M5 |       528.0       |   Major   '
+        '| Delayed maximum |\n| Sb_M4 |       537.0       |   Major   '
+        '| Delayed maximum |\n+-------+-------------------+-----------+'
+        '-----------------+')

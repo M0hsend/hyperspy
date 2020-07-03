@@ -1,4 +1,4 @@
-# Copyright 2007-2016 The HyperSpy developers
+# Copyright 2007-2020 The HyperSpy developers
 #
 # This file is part of  HyperSpy.
 #
@@ -63,7 +63,7 @@ class Test2D:
         vpm.intensity.map['is_set'][:] = True
         vpm.plasmon_energy.map['is_set'][:] = True
         vpm.fwhm.map['is_set'][:] = True
-        s.data = (m.as_signal(show_progressbar=None) * k).data
+        s.data = (m.as_signal() * k).data
 
         # Create ZLP
         z = s.deepcopy()
@@ -142,3 +142,11 @@ class Test2D:
             self.s.kramers_kronig_analysis(zlp=self.zlp,
                                            iterations=1,
                                            t=self.thickness.data)
+
+    def test_single_spectrum_dielectric(self):
+        s_in = self.s.inav[0, 0]
+        z = self.zlp.inav[0, 0]
+        t = self.thickness.data[0, 0]
+        cdf = s_in.kramers_kronig_analysis(zlp=z, iterations=1, n=1000.)
+        s_out = cdf.get_electron_energy_loss_spectrum(z, t)
+        assert np.allclose(s_out.data, s_in.data[1:], rtol=0.01)

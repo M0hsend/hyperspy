@@ -1,3 +1,21 @@
+# -*- coding: utf-8 -*-
+# Copyright 2007-2020 The HyperSpy developers
+#
+# This file is part of  HyperSpy.
+#
+#  HyperSpy is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+#  HyperSpy is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with  HyperSpy.  If not, see <http://www.gnu.org/licenses/>.
+
 from unittest import mock
 
 import numpy as np
@@ -19,8 +37,7 @@ class TestImage:
                              [pytest.param(True, marks=pytest.mark.parallel), False])
     def test_constant_sigma(self, parallel):
         s = self.im
-        s.map(gaussian_filter, sigma=1, show_progressbar=None,
-              parallel=parallel, ragged=self.ragged)
+        s.map(gaussian_filter, sigma=1, parallel=parallel, ragged=self.ragged)
         np.testing.assert_allclose(s.data, np.array(
             [[[1.68829507, 2.2662213, 2.84414753],
               [3.42207377, 4., 4.57792623],
@@ -34,8 +51,7 @@ class TestImage:
                              [pytest.param(True, marks=pytest.mark.parallel), False])
     def test_constant_sigma_navdim0(self, parallel):
         s = self.im.inav[0]
-        s.map(gaussian_filter, sigma=1, show_progressbar=None,
-              parallel=parallel, ragged=self.ragged)
+        s.map(gaussian_filter, sigma=1, parallel=parallel, ragged=self.ragged)
         np.testing.assert_allclose(s.data, np.array(
             [[1.68829507, 2.2662213, 2.84414753],
              [3.42207377, 4., 4.57792623],
@@ -50,8 +66,7 @@ class TestImage:
         sigmas.axes_manager.set_signal_dimension(0)
 
         s.map(gaussian_filter,
-              sigma=sigmas, show_progressbar=None,
-              parallel=parallel, ragged=self.ragged)
+              sigma=sigmas, parallel=parallel, ragged=self.ragged)
         np.testing.assert_allclose(s.data, np.array(
             [[[0., 1., 2.],
                 [3., 4., 5.],
@@ -63,10 +78,29 @@ class TestImage:
 
     @pytest.mark.parametrize('parallel',
                              [pytest.param(True, marks=pytest.mark.parallel), False])
+    def test_variable_sigma_navdim0(self, parallel):
+        s = self.im
+
+        sigma = hs.signals.BaseSignal(np.array([1, ]))
+        sigma.axes_manager.set_signal_dimension(0)
+
+        s.map(gaussian_filter, sigma=sigma, parallel=parallel,
+              ragged=self.ragged)
+        np.testing.assert_allclose(s.data, np.array(
+            [[[1.68829507, 2.2662213, 2.84414753],
+              [3.42207377, 4., 4.57792623],
+              [5.15585247, 5.7337787, 6.31170493]],
+
+             [[10.68829507, 11.2662213, 11.84414753],
+              [12.42207377, 13., 13.57792623],
+              [14.15585247, 14.7337787, 15.31170493]]]))
+
+    @pytest.mark.parametrize('parallel',
+                             [pytest.param(True, marks=pytest.mark.parallel), False])
     def test_axes_argument(self, parallel):
         s = self.im
-        s.map(rotate, angle=45, reshape=False, show_progressbar=None,
-              parallel=parallel, ragged=self.ragged)
+        s.map(rotate, angle=45, reshape=False, parallel=parallel,
+              ragged=self.ragged)
         np.testing.assert_allclose(s.data, np.array(
             [[[0., 2.23223305, 0.],
               [0.46446609, 4., 7.53553391],
@@ -81,8 +115,8 @@ class TestImage:
     def test_different_shapes(self, parallel):
         s = self.im
         angles = hs.signals.BaseSignal([0, 45])
-        s.map(rotate, angle=angles.T, reshape=True, show_progressbar=None,
-              parallel=parallel, ragged=True)
+        s.map(rotate, angle=angles.T, reshape=True, parallel=parallel,
+              ragged=True)
         # the dtype
         assert s.data.dtype is np.dtype('O')
         # the special slicing
@@ -114,8 +148,8 @@ class TestSignal1D:
         s = self.s
         m = mock.Mock()
         s.events.data_changed.connect(m.data_changed)
-        s.map(gaussian_filter1d, sigma=1, show_progressbar=None,
-              parallel=parallel, ragged=self.ragged)
+        s.map(gaussian_filter1d, sigma=1, parallel=parallel,
+              ragged=self.ragged)
         np.testing.assert_allclose(s.data, np.array(
             ([[0.42207377, 1., 1.57792623],
               [3.42207377, 4., 4.57792623]])))
@@ -123,10 +157,32 @@ class TestSignal1D:
 
     @pytest.mark.parametrize('parallel',
                              [pytest.param(True, marks=pytest.mark.parallel), False])
+    def test_variable_signal_parameter(self, parallel):
+        s = self.s
+        m = mock.Mock()
+        s.events.data_changed.connect(m.data_changed)
+        s.map(lambda A, B: A - B, B=s, parallel=parallel, ragged=self.ragged)
+        np.testing.assert_allclose(s.data, np.zeros_like(s.data))
+        assert m.data_changed.called
+
+    @pytest.mark.parametrize('parallel',
+                             [pytest.param(True, marks=pytest.mark.parallel), False])
+    def test_constant_signal_parameter(self, parallel):
+        s = self.s
+        m = mock.Mock()
+        s.events.data_changed.connect(m.data_changed)
+        s.map(lambda A, B: A - B, B=s.inav[0], parallel=parallel,
+              ragged=self.ragged)
+        np.testing.assert_allclose(s.data, np.array(
+            ([[0., 0., 0.],
+              [3., 3., 3.]])))
+        assert m.data_changed.called
+
+    @pytest.mark.parametrize('parallel',
+                             [pytest.param(True, marks=pytest.mark.parallel), False])
     def test_dtype(self, parallel):
         s = self.s
         s.map(lambda data: np.sqrt(np.complex128(data)),
-              show_progressbar=None,
               parallel=parallel, ragged=self.ragged)
         assert s.data.dtype is np.dtype('complex128')
 
@@ -145,8 +201,7 @@ class TestSignal0D:
         s = self.s
         m = mock.Mock()
         s.events.data_changed.connect(m.data_changed)
-        s.map(lambda x, e: x ** e, e=2, show_progressbar=None,
-              parallel=parallel, ragged=self.ragged)
+        s.map(lambda x, e: x ** e, e=2, parallel=parallel, ragged=self.ragged)
         np.testing.assert_allclose(
             s.data, (np.arange(0., 6) ** 2).reshape((2, 3)))
         assert m.data_changed.called
@@ -157,8 +212,7 @@ class TestSignal0D:
         s = self.s.inav[1, 1]
         m = mock.Mock()
         s.events.data_changed.connect(m.data_changed)
-        s.map(lambda x, e: x ** e, e=2, show_progressbar=None,
-              parallel=parallel, ragged=self.ragged)
+        s.map(lambda x, e: x ** e, e=2, parallel=parallel, ragged=self.ragged)
         np.testing.assert_allclose(s.data, self.s.inav[1, 1].data ** 2)
         assert m.data_changed.called
 
@@ -268,3 +322,14 @@ def test_singleton():
         assert _s.axes_manager[0].name == 'Scalar'
         assert isinstance(_s, hs.signals.BaseSignal)
         assert not isinstance(_s, hs.signals.Signal1D)
+
+
+def test_map_ufunc(caplog):
+    data = np.arange(100, 200).reshape(10, 10)
+    s = hs.signals.Signal1D(data)
+    # check that it works and it raises a warning
+    caplog.clear()
+    # s.map(np.log)
+    assert np.log(s) == s.map(np.log)
+    np.testing.assert_allclose(s.data, np.log(data))
+    assert "can direcly operate on hyperspy signals" in caplog.records[0].message

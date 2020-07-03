@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2007-2016 The HyperSpy developers
+# Copyright 2007-2020 The HyperSpy developers
 #
 # This file is part of  HyperSpy.
 #
@@ -234,6 +234,11 @@ class Samfire:
         self._setup()
         if self._workers and self.pool is not None:
             self.pool.update_parameters()
+        if 'min_function' in kwargs:
+            kwargs['min_function'] = dill.dumps(kwargs['min_function'])
+        if 'min_function_grad' in kwargs:
+            kwargs['min_function_grad'] = dill.dumps(
+                kwargs['min_function_grad'])
         self._args = kwargs
         num_of_strat = len(self.strategies)
         total_size = self.model.axes_manager.navigation_size - self.pixels_done
@@ -336,8 +341,8 @@ class Samfire:
         Parameters
         ----------
         filename: {str, None}
-            the filename. If None, a default value of "backup_"+signal_title is
-            used
+            the filename. If None, a default value of "backup_"+signal_title
+            is used.
         on_count: bool
             if True (default), only saves on the required count of steps
         """
@@ -399,7 +404,7 @@ class Samfire:
         """Changes current strategy to a new one. Certain rules apply:
         diffusion -> diffusion : resets all "ignored" pixels
         diffusion -> segmenter : saves already calculated pixels to be ignored
-            when(if) subsequently diffusion strategy is run
+        when(if) subsequently diffusion strategy is run
 
         Parameters
         ----------
@@ -609,7 +614,7 @@ class Samfire:
             if self.strategies:
                 try:
                     self._figure = self.active_strategy.plot(self._figure)
-                except:
+                except BaseException:
                     self._figure = None
                     self._figure = self.active_strategy.plot(self._figure)
 
@@ -624,3 +629,7 @@ class Samfire:
         ans += self.model.signal.metadata.General.title
         ans += u"'>"
         return ans
+
+    def stop(self):
+        if hasattr(self, "pool") and self.pool is not None:
+            self.pool.stop()

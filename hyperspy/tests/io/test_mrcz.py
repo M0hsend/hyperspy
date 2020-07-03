@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2007-2016 The HyperSpy developers
+# Copyright 2007-2020 The HyperSpy developers
 #
 # This file is part of  HyperSpy.
 #
@@ -19,18 +19,29 @@
 import numpy as np
 import numpy.testing as npt
 import os
+import sys
 import tempfile
 import pytest
 from time import perf_counter, sleep
 try:
     import blosc
     blosc_installed = True
-except:
+except BaseException:
     blosc_installed = False
+try:
+    import mrcz
+    mrcz_installed = True
+except BaseException:
+    mrcz_installed = False
 
 from hyperspy.io import load, save
 from hyperspy import signals
 from hyperspy.misc.test_utils import assert_deep_almost_equal
+
+
+pytestmark = pytest.mark.skipif(
+    not mrcz_installed, reason="mrcz not installed")
+
 
 #==============================================================================
 # MRCZ Test
@@ -112,8 +123,8 @@ class TestPythonMrcz:
                 except IOError:
                     sleep(0.001)
             print("Time to save file: {} s".format(
-                    perf_counter() - (t_stop - MAX_ASYNC_TIME)))
-            sleep(0.005)
+                perf_counter() - (t_stop - MAX_ASYNC_TIME)))
+            sleep(0.1)
 
         reSignal = load(mrcName)
         try:
